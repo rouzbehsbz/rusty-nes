@@ -6,7 +6,12 @@ use crate::{
     instructions::{AddressingMode, Instruction, Opcode},
 };
 
+pub const STACK_POINTER_INITIAL_OFFSET: u8 = 0xFD;
+pub const PROGRAM_ROM_ADDRESS: u16 = 0x8000;
+pub const STACK_POINTER_ADDRESS: u16 = 0x0100;
+
 bitflags! {
+    #[derive(Clone, Copy)]
     pub struct Status: u8 {
         const CARRY = 0b0000_0001;
         const ZERO = 0b0000_0010;
@@ -29,8 +34,8 @@ pub struct CPU {
     a: u8,
     x: u8,
     y: u8,
-    pc: u16,
     sp: u8,
+    pc: u16,
     status: Status,
 
     bus: Bus,
@@ -41,13 +46,13 @@ pub struct CPU {
 }
 
 impl CPU {
-    pub fn new(bus: Bus, pc: u16) -> Self {
+    pub fn new(bus: Bus) -> Self {
         Self {
             a: 0,
             x: 0,
             y: 0,
-            pc: pc,
-            sp: 0,
+            sp: STACK_POINTER_INITIAL_OFFSET,
+            pc: PROGRAM_ROM_ADDRESS,
             status: Status::new(),
             bus: bus,
             cycles: 0,
@@ -79,6 +84,7 @@ impl CPU {
 
             match Opcode::decode(byte) {
                 Some(opcode) => {
+                    println!("{:?}", opcode.instruction);
                     self.cycles = opcode.cycles;
 
                     self.execute_addressing_mode(opcode.addressing_mode);
@@ -132,8 +138,6 @@ impl CPU {
                 let hi = self.bus.read(self.pc) as u16;
                 self.increment_pc();
 
-                //TODO: need additional clock cycle
-
                 self.absolute_address = ((hi << 8) | lo).wrapping_add(self.x as u16)
             }
             AddressingMode::AbsoluteY => {
@@ -141,8 +145,6 @@ impl CPU {
                 self.increment_pc();
                 let hi = self.bus.read(self.pc) as u16;
                 self.increment_pc();
-
-                //TODO: need additional clock cycle
 
                 self.absolute_address = ((hi << 8) | lo).wrapping_add(self.y as u16)
             }
@@ -184,87 +186,211 @@ impl CPU {
         }
     }
 
-    pub fn execute_instruction(&self, instruction: Instruction) {
+    pub fn execute_instruction(&mut self, instruction: Instruction) {
         match instruction {
+            Instruction::NOP => {}
+            Instruction::CLC => self.set_status_flag(Status::CARRY, false),
+            Instruction::CLD => self.set_status_flag(Status::DECIMAL, false),
+            Instruction::CLI => self.set_status_flag(Status::INTERRUPT, false),
+            Instruction::CLV => self.set_status_flag(Status::OVERFLOW, false),
+            Instruction::SEC => self.set_status_flag(Status::CARRY, true),
+            Instruction::SED => self.set_status_flag(Status::DECIMAL, true),
+            Instruction::SEI => self.set_status_flag(Status::INTERRUPT, true),
+            Instruction::TAX => {
+                self.x = self.a;
+                self.update_zero_negative_flags(self.x)
+            },
+            Instruction::TAY => {
+                self.y = self.a;
+                self.update_zero_negative_flags(self.y)
+            },
+            Instruction::TXA => {
+                self.a = self.x;
+                self.update_zero_negative_flags(self.a)
+            },
+            Instruction::TYA => {
+                self.a = self.y;
+                self.update_zero_negative_flags(self.a)
+            },
+            Instruction::TSX => {
+                self.x = self.sp;
+                self.update_zero_negative_flags(self.x)
+            },
+            Instruction::TXS => {
+                self.sp = self.x;
+            },
+            Instruction::INX => {
+                self.x = self.x.wrapping_add(1);
+                self.update_zero_negative_flags(self.x)
+            }
+            Instruction::INY => {
+                self.y = self.y.wrapping_add(1);
+                self.update_zero_negative_flags(self.y)
+            },
+            Instruction::DEX => {
+                self.x = self.x.wrapping_sub(1);
+                self.update_zero_negative_flags(self.x)
+            },
+            Instruction::DEY => {
+                self.y = self.y.wrapping_sub(1);
+                self.update_zero_negative_flags(self.y)
+            },
+            Instruction::LDA => {
+                self.a = self.bus.read(self.absolute_address);
+                self.update_zero_negative_flags(self.a);
+            },
+            Instruction::LDX => {
+                self.x = self.bus.read(self.absolute_address);
+                self.update_zero_negative_flags(self.x);
+            }
+            Instruction::LDY => {
+                self.y = self.bus.read(self.absolute_address);
+                self.update_zero_negative_flags(self.y);
+            }
+            Instruction::STA => {
+                self.bus.write(self.absolute_address, self.a);
+            },
+            Instruction::STX => {
+                self.bus.write(self.absolute_address, self.x);
+            }
+            Instruction::STY => {
+                self.bus.write(self.absolute_address, self.y);
+            }
             Instruction::AND => {
                 let value = self.bus.read(self.absolute_address);
-
                 self.a &= value;
+                self.update_zero_negative_flags(self.a)
+            },
+            Instruction::ORA => {
+                let value = self.bus.read(self.absolute_address);
+                self.a |= value;
+                self.update_zero_negative_flags(self.a)
+            },
+            Instruction::EOR => {
+                let value = self.bus.read(self.absolute_address);
+                self.a ^= value;
+                self.update_zero_negative_flags(self.a);
+            }
+            Instruction::CMP => {
+                
+            }
+            Instruction::CPX => {
 
-                self.set_status_flag(Status::ZERO, self.is_zero(self.a));
-                self.set_status_flag(Status::NEGATIVE, self.is_negative(self.a));
+            }
+            Instruction::CPY => {
 
-                //TODO: could potentially need additional clock cycle
             }
             Instruction::BCS => {
-                //TODO: could potentially need additional clock cycle
-
                 if self.get_status_flag(Status::CARRY) {
                     self.absolute_address = self.pc.wrapping_add(self.relative_address as u16);
                     self.pc = self.absolute_address;
                 }
             }
             Instruction::BCC => {
-                //TODO: could potentially need additional clock cycle
-
                 if !self.get_status_flag(Status::CARRY) {
                     self.absolute_address = self.pc.wrapping_add(self.relative_address as u16);
                     self.pc = self.absolute_address;
                 }
             }
             Instruction::BEQ => {
-                //TODO: could potentially need additional clock cycle
-
                 if self.get_status_flag(Status::ZERO) {
                     self.absolute_address = self.pc.wrapping_add(self.relative_address as u16);
                     self.pc = self.absolute_address;
                 }
             }
             Instruction::BMI => {
-                //TODO: could potentially need additional clock cycle
-
                 if self.get_status_flag(Status::NEGATIVE) {
                     self.absolute_address = self.pc.wrapping_add(self.relative_address as u16);
                     self.pc = self.absolute_address;
                 }
             }
             Instruction::BNE => {
-                //TODO: could potentially need additional clock cycle
-
                 if !self.get_status_flag(Status::ZERO) {
                     self.absolute_address = self.pc.wrapping_add(self.relative_address as u16);
                     self.pc = self.absolute_address;
                 }
             }
             Instruction::BPL => {
-                //TODO: could potentially need additional clock cycle
-
                 if !self.get_status_flag(Status::NEGATIVE) {
                     self.absolute_address = self.pc.wrapping_add(self.relative_address as u16);
                     self.pc = self.absolute_address;
                 }
             }
             Instruction::BVC => {
-                //TODO: could potentially need additional clock cycle
-
                 if !self.get_status_flag(Status::OVERFLOW) {
                     self.absolute_address = self.pc.wrapping_add(self.relative_address as u16);
                     self.pc = self.absolute_address;
                 }
             }
             Instruction::BVS => {
-                //TODO: could potentially need additional clock cycle
-
                 if self.get_status_flag(Status::OVERFLOW) {
                     self.absolute_address = self.pc.wrapping_add(self.relative_address as u16);
                     self.pc = self.absolute_address;
                 }
             }
-            Instruction::CLC => {
-                self.set_status_flag(Status::CARRY, false);
+            Instruction::ADC => {
+
             }
-            Instruction::CLD => {
-                self.set_status_flag(Status::DECIMAL, false);
+            Instruction::SBC => {
+
+            }
+            Instruction::ASL => {
+                
+            }
+            Instruction::LSR => {
+                
+            }
+            Instruction::ROL => {
+                
+            }
+            Instruction::ROR => {
+                
+            }
+            Instruction::INC => {
+
+            }
+            Instruction::DEC => {
+                
+            }
+            Instruction::JMP => {
+                self.pc = self.absolute_address;
+            }
+            Instruction::PHA => {
+                self.bus.write(STACK_POINTER_ADDRESS | self.sp as u16, self.a);
+                self.sp = self.sp.wrapping_sub(1);
+            }
+            Instruction::PHP => {
+                let status = self.status |  Status::BREAK | Status::UNUSED;
+                self.bus.write(STACK_POINTER_ADDRESS | self.sp as u16, status.bits());
+                self.sp = self.sp.wrapping_sub(1);
+            }
+            Instruction::PLA => {
+                self.sp = self.sp.wrapping_add(1);
+                self.a = self.bus.read(STACK_POINTER_ADDRESS | self.sp as u16);
+                self.update_zero_negative_flags(self.a);
+            }
+            Instruction::PLP => {
+                self.sp = self.sp.wrapping_add(1);
+                let status = self.bus.read(STACK_POINTER_ADDRESS | self.sp as u16);
+                self.status = Status::from_bits_truncate(status);
+                self.set_status_flag(Status::BREAK, false);
+                self.set_status_flag(Status::UNUSED, true);
+
+            }
+            Instruction::JSR => {
+
+            }
+            Instruction::RTS => {
+
+            }
+            Instruction::RTI => {
+
+            }
+            Instruction::BRK => {
+
+            }
+            Instruction::BIT => {
+
             }
         }
     }
@@ -275,5 +401,10 @@ impl CPU {
 
     fn is_negative(&self, value: u8) -> bool {
         value & 0x80 != 0
+    }
+
+    fn update_zero_negative_flags(&mut self, value: u8) {
+        self.set_status_flag(Status::ZERO, self.is_zero(value));
+        self.set_status_flag(Status::NEGATIVE, self.is_negative(value));
     }
 }

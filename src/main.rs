@@ -1,7 +1,7 @@
 use crate::{
     bus::Bus,
-    cpu::CPU,
-    ram::{PROGRAM_ROM_ADDRESS, RAM},
+    cpu::{CPU},
+    ram::{RAM},
 };
 
 mod bus;
@@ -14,7 +14,7 @@ fn main() {
     let sram = RAM::<2048>::new();
     let bus = Bus::new(Box::new(sram));
 
-    let mut cpu = CPU::new(bus, PROGRAM_ROM_ADDRESS);
+    let mut cpu = CPU::new(bus);
 
     loop {
         if let Err(err) = cpu.clock() {

@@ -27,6 +27,11 @@ impl Bus {
     }
 
     pub fn write(&mut self, address: u16, value: u8) {
-        self.ram.write(address, value);
+          match address {
+            RAM_ADDRESS_LO..=RAM_ADDRESS_HI => {
+                self.ram.write(address, value)
+            }
+            _ => {}
+        }
     }
 }

@@ -1,3 +1,4 @@
+#[derive(Debug)]
 pub enum AddressingMode {
     Accumulator,
     Implied,
@@ -14,6 +15,7 @@ pub enum AddressingMode {
     IndirectY,
 }
 
+#[derive(Debug)]
 pub enum Instruction {
     ADC,
     AND,
@@ -73,6 +75,7 @@ pub enum Instruction {
     TYA,
 }
 
+#[derive(Debug)]
 pub struct Opcode {
     pub instruction: Instruction,
     pub addressing_mode: AddressingMode,
