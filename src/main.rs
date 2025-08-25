@@ -1,9 +1,24 @@
-mod cpu;
-mod ram;
+use crate::{
+    bus::Bus,
+    cpu::CPU,
+    ram::{PROGRAM_ROM_ADDRESS, RAM},
+};
+
 mod bus;
-mod instructions;
+mod cpu;
 mod errors;
+mod instructions;
+mod ram;
 
 fn main() {
+    let sram = RAM::<2048>::new();
+    let bus = Bus::new(Box::new(sram));
 
+    let mut cpu = CPU::new(bus, PROGRAM_ROM_ADDRESS);
+
+    loop {
+        if let Err(err) = cpu.clock() {
+            panic!("{}", err);
+        }
+    }
 }
