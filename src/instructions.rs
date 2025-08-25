@@ -20,8 +20,8 @@ pub struct Opcode {
 }
 
 impl Opcode {
-    pub fn decode(opcode: u8) -> Option<Self> {
-        match opcode {
+    pub fn decode(byte: u8) -> Option<Self> {
+        match byte {
             0x00 => Some(Opcode { instruction: Instruction::BRK, addressing_mode: AddressingMode::Implied, bytes: 1, cycles: 7 }),
             0x01 => Some(Opcode { instruction: Instruction::ORA, addressing_mode: AddressingMode::IndirectX, bytes: 2, cycles: 6 }),
             0x05 => Some(Opcode { instruction: Instruction::ORA, addressing_mode: AddressingMode::ZeroPage, bytes: 2, cycles: 3 }),

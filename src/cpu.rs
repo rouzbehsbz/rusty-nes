@@ -1,6 +1,6 @@
 use bitflags::bitflags;
 
-use crate::{bus::Bus, errors::{AppError, AppResult}, instructions::{AddressingMode, Instruction, Opcode, OpcodeOperand, RawOpcode}};
+use crate::{bus::Bus, errors::{AppError, AppResult}, instructions::{AddressingMode, Opcode}};
 
 const ENTRY_POINT_ADDRESS: u16 = 0x8000;
 
@@ -38,7 +38,9 @@ pub struct CPU {
 
     bus: Bus,
 
-    cycles: u8
+    cycles: u8,
+    variable: u8,
+    absolute_address: u16
 }
 
 impl CPU {
@@ -47,23 +49,30 @@ impl CPU {
             a: 0,
             x: 0,
             y: 0,
-            pc: 0,
+            pc: ENTRY_POINT_ADDRESS,
             status: Status::new(),
             bus: bus,
             cycles: 0,
+            variable: 0,
+            absolute_address: 0
         }
+    }
+
+    pub fn increment_pc(&mut self) {
+         self.pc = self.pc.wrapping_add(1);
     }
 
     pub fn clock(&mut self) -> AppResult<()> {
         if self.cycles == 0 {
             let byte = self.bus.read(self.pc);
-            self.pc = self.pc.wrapping_add(1);
+            self.increment_pc();
 
             match Opcode::decode(byte) {
                 Some(opcode) => {
                     self.cycles = opcode.cycles;
 
-                    
+                    self.execute_addressing_mode(opcode.addressing_mode);
+                    self.execute_instruction();
                 },
                 None => return Err(AppError::InvalidOpcode)
             }
@@ -71,6 +80,44 @@ impl CPU {
 
         self.cycles -= 1;
         Ok(())
+    }
+
+    pub fn execute_addressing_mode(&self, addressing_mode: AddressingMode) {
+        match addressing_mode {
+            AddressingMode::Implied => {
+
+            },
+            AddressingMode::Accumulator => {
+                self.variable = self.a;
+            },
+            AddressingMode::Immediate => {
+                self.absolute_address = self.pc;
+                self.increment_pc();
+            },
+            AddressingMode::ZeroPage => {
+                self.absolute_address = self.bus.read(self.pc) as u16;
+                self.increment_pc();
+            },
+            AddressingMode::ZeroPageX => {
+                self.absolute_address = self.bus.read(self.pc).wrapping_add(self.x) as u16;
+                self.increment_pc();
+            },
+            AddressingMode::ZeroPageY => {
+                self.absolute_address = self.bus.read(self.pc).wrapping_add(self.y) as u16;
+                self.increment_pc();
+            },
+            AddressingMode::Absolute => {
+                let lo = self.bus.read(self.pc) as u16;
+                self.increment_pc();
+                let hi = self.bus.read(self.pc) as u16;
+
+                self.absolute_address = (hi << 8) | lo;
+            }
+        }
+    }
+
+    pub fn execute_instruction(&self) {
+        
     }
 
     pub fn get_next_opcode(&mut self) -> AppResult<(Instruction, OpcodeOperand)> {
@@ -144,18 +191,6 @@ impl CPU {
                 Ok((raw_opcode.instruction, opcode_operand))
             },
             None => Err(AppError::InvalidOpcode)
-        }
-    }
-
-    pub fn execute_opcode(&mut self, instruction: Instruction, opcode_operand: OpcodeOperand) {
-        todo!()
-    }
-
-    pub fn run(&mut self) -> AppResult<()> {
-        loop {
-            let (instruction, opcode_operand) = self.get_next_opcode()?;
-
-            self.execute_opcode(instruction, opcode_operand);
         }
     }
 }
