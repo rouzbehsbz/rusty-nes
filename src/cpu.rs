@@ -62,6 +62,8 @@ impl CPU {
             match Opcode::decode(byte) {
                 Some(opcode) => {
                     self.cycles = opcode.cycles;
+
+                    
                 },
                 None => return Err(AppError::InvalidOpcode)
             }
