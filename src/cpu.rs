@@ -9,6 +9,7 @@ use crate::{
 pub const STACK_POINTER_INITIAL_OFFSET: u8 = 0xFD;
 pub const PROGRAM_ROM_ADDRESS: u16 = 0x8000;
 pub const STACK_POINTER_ADDRESS: u16 = 0x0100;
+pub const IRQ_BRK_VECTOR_ADDRESS: u16 = 0xFFFE;
 
 bitflags! {
     #[derive(Clone, Copy)]
@@ -84,7 +85,6 @@ impl CPU {
 
             match Opcode::decode(byte) {
                 Some(opcode) => {
-                    println!("{:?}", opcode.instruction);
                     self.cycles = opcode.cycles;
 
                     self.execute_addressing_mode(opcode.addressing_mode);
@@ -378,19 +378,51 @@ impl CPU {
 
             }
             Instruction::JSR => {
-
+                let return_address = self.pc.wrapping_sub(1);
+                self.bus.write(STACK_POINTER_ADDRESS | self.sp as u16, (return_address >> 8) as u8);
+                self.sp = self.sp.wrapping_sub(1);
+                self.bus.write(STACK_POINTER_ADDRESS | self.sp as u16, return_address as u8);
+                self.sp = self.sp.wrapping_sub(1);
+                self.pc = self.absolute_address;
             }
             Instruction::RTS => {
-
+                self.sp = self.sp.wrapping_add(1);
+                let lo = self.bus.read(STACK_POINTER_ADDRESS | self.sp as u16) as u16;
+                self.sp = self.sp.wrapping_add(1);
+                let hi = self.bus.read(STACK_POINTER_ADDRESS | self.sp as u16) as u16;
+                self.pc = ((hi << 8) | lo).wrapping_add(1);
             }
             Instruction::RTI => {
-
+                self.sp = self.sp.wrapping_add(1);
+                let status = self.bus.read(STACK_POINTER_ADDRESS | self.sp as u16);
+                self.status = Status::from_bits_truncate(status);
+                self.set_status_flag(Status::BREAK, false);
+                self.set_status_flag(Status::UNUSED, true);
+                self.sp = self.sp.wrapping_add(1);
+                let lo = self.bus.read(STACK_POINTER_ADDRESS | self.sp as u16) as u16;
+                self.sp = self.sp.wrapping_add(1);
+                let hi = self.bus.read(STACK_POINTER_ADDRESS | self.sp as u16) as u16;
+                self.pc = (hi << 8) | lo;
             }
             Instruction::BRK => {
-
+                let return_address = self.pc.wrapping_add(1);
+                self.bus.write(STACK_POINTER_ADDRESS | self.sp as u16, (return_address >> 8) as u8);
+                self.sp = self.sp.wrapping_sub(1);
+                self.bus.write(STACK_POINTER_ADDRESS | self.sp as u16, return_address as u8);
+                self.sp = self.sp.wrapping_sub(1);
+                let status = self.status | Status::BREAK | Status::UNUSED;
+                self.bus.write(STACK_POINTER_ADDRESS | self.sp as u16, status.bits());
+                self.sp = self.sp.wrapping_sub(1);
+                self.set_status_flag(Status::INTERRUPT, true); 
+                let lo = self.bus.read(IRQ_BRK_VECTOR_ADDRESS) as u16;
+                let hi = self.bus.read(IRQ_BRK_VECTOR_ADDRESS + 1) as u16;
+                self.pc = (hi << 8) | lo;
             }
             Instruction::BIT => {
-
+                let value = self.bus.read(self.absolute_address);
+                self.update_zero_negative_flags(self.a & value);
+                self.set_status_flag(Status::NEGATIVE, self.is_negative(value));
+                self.set_status_flag(Status::OVERFLOW, self.is_overflow(value));
             }
         }
     }
@@ -401,6 +433,10 @@ impl CPU {
 
     fn is_negative(&self, value: u8) -> bool {
         value & 0x80 != 0
+    }
+
+    fn is_overflow(&self, value: u8) -> bool {
+        value & 0x40 != 0
     }
 
     fn update_zero_negative_flags(&mut self, value: u8) {

@@ -1,5 +1,5 @@
 pub const RAM_ADDRESS_LO: u16 = 0x0000;
-pub const RAM_ADDRESS_HI: u16 = 0x077F;
+pub const RAM_ADDRESS_HI: u16 = 0x0800;
 
 pub trait BusDevice {
     fn read(&self, address: u16) -> u8;
@@ -7,19 +7,19 @@ pub trait BusDevice {
 }
 
 pub struct Bus {
-    ram: Box<dyn BusDevice>,
+    ram: Box<dyn BusDevice>
 }
 
 impl Bus {
     pub fn new(ram: Box<dyn BusDevice>) -> Bus {
         Self { 
-            ram: ram
+            ram: ram,
         }
     }
 
     pub fn read(&self, address: u16) -> u8 {
         match address {
-            RAM_ADDRESS_LO..=RAM_ADDRESS_HI => {
+            RAM_ADDRESS_LO..RAM_ADDRESS_HI => {
                 self.ram.read(address)
             }
             _ => 0
@@ -28,7 +28,7 @@ impl Bus {
 
     pub fn write(&mut self, address: u16, value: u8) {
           match address {
-            RAM_ADDRESS_LO..=RAM_ADDRESS_HI => {
+            RAM_ADDRESS_LO..RAM_ADDRESS_HI => {
                 self.ram.write(address, value)
             }
             _ => {}

@@ -1,14 +1,14 @@
 use crate::{
     bus::Bus,
     cpu::{CPU},
-    ram::{RAM},
+    ram::RAM,
 };
 
 mod bus;
 mod cpu;
+mod ram;
 mod errors;
 mod instructions;
-mod ram;
 
 fn main() {
     let sram = RAM::<2048>::new();
