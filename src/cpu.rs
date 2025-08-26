@@ -88,7 +88,7 @@ impl CPU {
                     self.cycles = opcode.cycles;
 
                     self.execute_addressing_mode(opcode.addressing_mode);
-                    self.execute_instruction(opcode.instruction);
+                    self.execute_instruction(opcode.instruction, opcode.addressing_mode);
                 }
                 None => return Err(AppError::InvalidOpcode),
             }
@@ -186,7 +186,7 @@ impl CPU {
         }
     }
 
-    pub fn execute_instruction(&mut self, instruction: Instruction) {
+    pub fn execute_instruction(&mut self, instruction: Instruction, addressing_mode: AddressingMode) {
         match instruction {
             Instruction::NOP => {}
             Instruction::CLC => self.set_status_flag(Status::CARRY, false),
@@ -272,13 +272,25 @@ impl CPU {
                 self.update_zero_negative_flags(self.a);
             }
             Instruction::CMP => {
-                
+                let value = self.bus.read(self.absolute_address);
+                let result = self.a.wrapping_sub(value);
+
+                self.set_status_flag(Status::CARRY, self.a >= value);
+                self.update_zero_negative_flags(result);
             }
             Instruction::CPX => {
+                let value = self.bus.read(self.absolute_address);
+                let result = self.x.wrapping_sub(value);
 
+                self.set_status_flag(Status::CARRY, self.x >= value);
+                self.update_zero_negative_flags(result);
             }
             Instruction::CPY => {
+                let value = self.bus.read(self.absolute_address);
+                let result = self.y.wrapping_sub(value);
 
+                self.set_status_flag(Status::CARRY, self.y >= value);
+                self.update_zero_negative_flags(result);
             }
             Instruction::BCS => {
                 if self.get_status_flag(Status::CARRY) {
@@ -329,28 +341,74 @@ impl CPU {
                 }
             }
             Instruction::ADC => {
+                let value = self.bus.read(self.absolute_address);
+                let carry = if self.get_status_flag(Status::CARRY) { 1 } else { 0 };
+                let result = self.a as u16 + value as u16 + carry;
 
+                self.set_status_flag(Status::CARRY, result > 0xFF);
+                self.set_status_flag(Status::OVERFLOW, 
+                    (self.a ^ value) & 0x80 == 0 && (self.a ^ result as u8) & 0x80 != 0);
+                self.a = result as u8;
+                self.update_zero_negative_flags(self.a);
             }
             Instruction::SBC => {
+                let value = self.bus.read(self.absolute_address);
+                let carry = if self.get_status_flag(Status::CARRY) { 1 } else { 0 };
+                let result = self.a as i16 - value as i16 - (1 - carry) as i16;
 
+                self.set_status_flag(Status::CARRY, result >= 0);
+                self.set_status_flag(Status::OVERFLOW, 
+                    (self.a ^ value) & 0x80 != 0 && (self.a ^ result as u8) & 0x80 != 0);
+                self.a = result as u8;
+                self.update_zero_negative_flags(self.a);
             }
             Instruction::ASL => {
-                
+                let value = self.read_a_or_absolute(addressing_mode);
+                let result = value << 1;
+
+                self.set_status_flag(Status::CARRY, self.is_negative(value));
+                self.write_a_or_absolute(addressing_mode, result);
+                self.update_zero_negative_flags(result);
             }
             Instruction::LSR => {
-                
+                let value = self.read_a_or_absolute(addressing_mode);
+                let result = value >> 1;
+
+                self.set_status_flag(Status::CARRY, self.is_bit0_set(value));
+                self.write_a_or_absolute(addressing_mode, result);
+                self.update_zero_negative_flags(result);
             }
             Instruction::ROL => {
-                
+                let mut value = self.read_a_or_absolute(addressing_mode);
+                let old_carry = if self.get_status_flag(Status::CARRY) { 1 } else { 0 };
+                self.set_status_flag(Status::CARRY, self.is_negative(value));
+
+                value = (value << 1) | old_carry;
+
+                self.update_zero_negative_flags(value);
+                self.write_a_or_absolute(addressing_mode, value);
             }
             Instruction::ROR => {
-                
+                let mut value = self.read_a_or_absolute(addressing_mode);
+                let old_carry = if self.get_status_flag(Status::CARRY) { 0x80 } else { 0 };
+                self.set_status_flag(Status::CARRY, self.is_bit0_set(value));
+
+                value = (value >> 1) | old_carry;
+
+                self.update_zero_negative_flags(value);
+                self.write_a_or_absolute(addressing_mode, value);
             }
             Instruction::INC => {
-
+                let mut value = self.bus.read(self.absolute_address);
+                value = value.wrapping_add(1);
+                self.bus.write(self.absolute_address, value);
+                self.update_zero_negative_flags(value);
             }
             Instruction::DEC => {
-                
+                let mut value = self.bus.read(self.absolute_address);
+                value = value.wrapping_sub(1);
+                self.bus.write(self.absolute_address, value);
+                self.update_zero_negative_flags(value);
             }
             Instruction::JMP => {
                 self.pc = self.absolute_address;
@@ -439,8 +497,26 @@ impl CPU {
         value & 0x40 != 0
     }
 
+    fn is_bit0_set(&self, value: u8) -> bool {
+        value & 0x01 != 0
+    }
+
     fn update_zero_negative_flags(&mut self, value: u8) {
         self.set_status_flag(Status::ZERO, self.is_zero(value));
         self.set_status_flag(Status::NEGATIVE, self.is_negative(value));
+    }
+
+    fn read_a_or_absolute(&self, addressing_mode: AddressingMode) -> u8 {
+        match addressing_mode {
+            AddressingMode::Accumulator => self.a,
+            _ => self.bus.read(self.absolute_address)
+        }
+    }
+
+    fn write_a_or_absolute(&mut self, addressing_mode: AddressingMode, value: u8) {
+        match addressing_mode {
+            AddressingMode::Accumulator => self.a = value,
+            _ => self.bus.write(self.absolute_address, value)
+        }
     }
 }
