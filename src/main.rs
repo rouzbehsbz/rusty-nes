@@ -7,6 +7,7 @@ use crate::{
 mod bus;
 mod cpu;
 mod ram;
+mod ppu;
 mod errors;
 mod instructions;
 
