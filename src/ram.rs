@@ -12,6 +12,12 @@ impl<const SIZE: usize> RAM<SIZE> {
     pub fn get_index(&self, address: u16) -> usize {
         (address as usize) % SIZE
     }
+
+    pub fn load_program(&mut self, program: &[u8], start_address: u16) {
+        let start_index = self.get_index(start_address);
+        let end_index = start_index + program.len();
+        self.memory[start_index..end_index].copy_from_slice(program);
+    }
 }
 
 impl<const SIZE: usize> BusDevice for RAM<SIZE> {

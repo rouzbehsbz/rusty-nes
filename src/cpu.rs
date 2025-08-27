@@ -16,7 +16,7 @@ pub const RESET_VECTOR_ADDRESS_LO: u16 = 0xFFFC;
 pub const RESET_VECTOR_ADDRESS_HI: u16 = 0xFFFD;
 
 bitflags! {
-    #[derive(Clone, Copy)]
+    #[derive(Debug, Clone, Copy)]
     pub struct Status: u8 {
         const CARRY = 0b0000_0001;
         const ZERO = 0b0000_0010;
@@ -74,6 +74,11 @@ impl CPU {
 
                     self.execute_addressing_mode(opcode.addressing_mode);
                     self.execute_instruction(opcode.instruction, opcode.addressing_mode);
+
+                    println!(
+                        "A: {:02X}, X: {:02X}, Y: {:02X}, SP: {:02X}, PC: {:04X}, STATUS: {:?}",
+                        self.a, self.x, self.y, self.sp, self.pc, self.status
+                    );
                 }
                 None => return Err(AppError::InvalidOpcode),
             }
@@ -105,14 +110,13 @@ impl CPU {
         }
 
         let pc = self.pc;
-        self.bus.write(self.get_stack_address(), (pc >> 8) as u8);
-        self.sp = self.sp.wrapping_sub(1);
-        self.bus.write(self.get_stack_address(), pc as u8);
-        self.sp = self.sp.wrapping_sub(1);
+
+        self.write_to_stack((pc >> 8) as u8);
+        self.write_to_stack(pc as u8);
 
         let status = self.status | Status::UNUSED;
-        self.bus.write(self.get_stack_address(), status.bits());
-        self.sp = self.sp.wrapping_sub(1);
+
+        self.write_to_stack(status.bits());
 
         self.set_status_flag(Status::INTERRUPT, true);
 
@@ -125,14 +129,13 @@ impl CPU {
 
     pub fn nmi(&mut self) {
         let pc = self.pc;
-        self.bus.write(self.get_stack_address(), (pc >> 8) as u8);
-        self.sp = self.sp.wrapping_sub(1);
-        self.bus.write(self.get_stack_address(), pc as u8);
-        self.sp = self.sp.wrapping_sub(1);
+
+        self.write_to_stack((pc >> 8) as u8);
+        self.write_to_stack(pc as u8);
 
         let status = self.status | Status::UNUSED;
-        self.bus.write(self.get_stack_address(), status.bits());
-        self.sp = self.sp.wrapping_sub(1);
+
+        self.write_to_stack(status.bits());
 
         self.set_status_flag(Status::INTERRUPT, true);
 
@@ -475,22 +478,18 @@ impl CPU {
                 self.pc = self.absolute_address;
             }
             Instruction::PHA => {
-                self.bus.write(self.get_stack_address(), self.a);
-                self.sp = self.sp.wrapping_sub(1);
+                self.write_to_stack(self.a);
             }
             Instruction::PHP => {
                 let status = self.status |  Status::BREAK | Status::UNUSED;
-                self.bus.write(self.get_stack_address(), status.bits());
-                self.sp = self.sp.wrapping_sub(1);
+                self.write_to_stack(status.bits());
             }
             Instruction::PLA => {
-                self.sp = self.sp.wrapping_add(1);
-                self.a = self.bus.read(self.get_stack_address());
+                self.a = self.read_from_stack();
                 self.update_zero_negative_flags(self.a);
             }
             Instruction::PLP => {
-                self.sp = self.sp.wrapping_add(1);
-                let status = self.bus.read(self.get_stack_address());
+                let status = self.read_from_stack();
                 self.status = Status::from_bits_truncate(status);
                 self.set_status_flag(Status::BREAK, false);
                 self.set_status_flag(Status::UNUSED, true);
@@ -498,40 +497,30 @@ impl CPU {
             }
             Instruction::JSR => {
                 let return_address = self.pc.wrapping_sub(1);
-                self.bus.write(self.get_stack_address(), (return_address >> 8) as u8);
-                self.sp = self.sp.wrapping_sub(1);
-                self.bus.write(self.get_stack_address(), return_address as u8);
-                self.sp = self.sp.wrapping_sub(1);
+                self.write_to_stack((return_address >> 8) as u8);
+                self.write_to_stack(return_address as u8);
                 self.pc = self.absolute_address;
             }
             Instruction::RTS => {
-                self.sp = self.sp.wrapping_add(1);
-                let lo = self.bus.read(self.get_stack_address());
-                self.sp = self.sp.wrapping_add(1);
-                let hi = self.bus.read(self.get_stack_address());
+                let lo = self.read_from_stack();
+                let hi = self.read_from_stack();
                 self.pc = (self.get_bytes_to_address(hi, lo)).wrapping_add(1);
             }
             Instruction::RTI => {
-                self.sp = self.sp.wrapping_add(1);
-                let status = self.bus.read(self.get_stack_address());
+                let status = self.read_from_stack();
                 self.status = Status::from_bits_truncate(status);
                 self.set_status_flag(Status::BREAK, false);
                 self.set_status_flag(Status::UNUSED, true);
-                self.sp = self.sp.wrapping_add(1);
-                let lo = self.bus.read(self.get_stack_address());
-                self.sp = self.sp.wrapping_add(1);
-                let hi = self.bus.read(self.get_stack_address());
+                let lo = self.read_from_stack();
+                let hi = self.read_from_stack();
                 self.pc = self.get_bytes_to_address(hi, lo);
             }
             Instruction::BRK => {
                 let return_address = self.pc.wrapping_add(1);
-                self.bus.write(self.get_stack_address(), (return_address >> 8) as u8);
-                self.sp = self.sp.wrapping_sub(1);
-                self.bus.write(self.get_stack_address(), return_address as u8);
-                self.sp = self.sp.wrapping_sub(1);
+                self.write_to_stack((return_address >> 8) as u8);
+                self.write_to_stack(return_address as u8);
                 let status = self.status | Status::BREAK | Status::UNUSED;
-                self.bus.write(self.get_stack_address(), status.bits());
-                self.sp = self.sp.wrapping_sub(1);
+                self.write_to_stack(status.bits());
                 self.set_status_flag(Status::INTERRUPT, true); 
                 let lo = self.bus.read(IRQ_VECTOR_ADDRESS_LO);
                 let hi = self.bus.read(IRQ_VECTOR_ADDRESS_HI);
@@ -544,6 +533,16 @@ impl CPU {
                 self.set_status_flag(Status::OVERFLOW, self.is_overflow(value));
             }
         }
+    }
+
+    fn write_to_stack(&mut self, value: u8) {
+        self.bus.write(self.get_stack_address(), value);
+        self.sp = self.sp.wrapping_sub(1);
+    }
+
+    fn read_from_stack(&mut self) -> u8 {
+        self.sp = self.sp.wrapping_add(1);
+        self.bus.read(self.get_stack_address())
     }
 
     fn is_zero(&self, value: u8) -> bool {
