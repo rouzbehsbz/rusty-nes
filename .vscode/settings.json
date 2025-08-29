@@ -1,5 +1,5 @@
 {
     "github.copilot.enable": {
-        "*": false
+        "*": false // trust me its better :)
     }
 }
