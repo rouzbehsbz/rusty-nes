@@ -54,7 +54,7 @@ impl CPU {
             x: 0,
             y: 0,
             sp: STACK_POINTER_INITIAL_OFFSET,
-            pc: ((hi as u16) << 8) | (lo as u16),
+            pc: (hi << 8) | lo,
             status: Status::UNUSED | Status::INTERRUPT,
             bus: bus,
             cycles: 0,
@@ -74,11 +74,6 @@ impl CPU {
 
                     self.execute_addressing_mode(opcode.addressing_mode);
                     self.execute_instruction(opcode.instruction, opcode.addressing_mode);
-
-                    println!(
-                        "A: {:02X}, X: {:02X}, Y: {:02X}, SP: {:02X}, PC: {:04X}, STATUS: {:?}",
-                        self.a, self.x, self.y, self.sp, self.pc, self.status
-                    );
                 }
                 None => return Err(AppError::InvalidOpcode),
             }
@@ -114,7 +109,7 @@ impl CPU {
         self.write_to_stack((pc >> 8) as u8);
         self.write_to_stack(pc as u8);
 
-        let status = self.status | Status::UNUSED;
+        let status = self.status;
 
         self.write_to_stack(status.bits());
 
@@ -481,7 +476,7 @@ impl CPU {
                 self.write_to_stack(self.a);
             }
             Instruction::PHP => {
-                let status = self.status |  Status::BREAK | Status::UNUSED;
+                let status = self.status | Status::BREAK | Status::UNUSED;
                 self.write_to_stack(status.bits());
             }
             Instruction::PLA => {
@@ -502,7 +497,7 @@ impl CPU {
                 self.pc = self.absolute_address;
             }
             Instruction::RTS => {
-                let lo = self.read_from_stack();
+                let lo: u8 = self.read_from_stack();
                 let hi = self.read_from_stack();
                 self.pc = (self.get_bytes_to_address(hi, lo)).wrapping_add(1);
             }
