@@ -12,10 +12,10 @@ impl Mapper {
     }
 
     pub fn get_prg_address(&self, address: u16) -> u16 {
-        0
+        address & if self.prg_banks > 1 { 0x7FFF } else { 0x3FFF }
     }
 
     pub fn get_chr_address(&self, address: u16) -> u16 {
-        0
+        address
     }
 }

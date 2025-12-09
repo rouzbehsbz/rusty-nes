@@ -1,8 +1,12 @@
-pub struct PPU {}
+use crate::bus::ppu_bus::PpuBus;
+
+pub struct PPU {
+    bus: PpuBus,
+}
 
 impl PPU {
-    pub fn new() -> Self {
-        Self {}
+    pub fn new(bus: PpuBus) -> Self {
+        Self { bus }
     }
 
     pub fn read(&self, address: u16) -> u8 {

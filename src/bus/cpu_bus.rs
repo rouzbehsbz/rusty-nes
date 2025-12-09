@@ -1,3 +1,5 @@
+use std::rc::Rc;
+
 use crate::{cartridge::cartridge::Cartridge, memory::memory::Memory, ppu::ppu::PPU};
 
 pub const RAM_ADDRESS_LO: u16 = 0x0000;
@@ -17,11 +19,11 @@ pub const RESET_VECTOR_ADDRESS_HI: u16 = 0xFFFD;
 pub struct CpuBus {
     ram: Memory,
     ppu: PPU,
-    cartridge: Cartridge,
+    cartridge: Rc<Cartridge>,
 }
 
 impl CpuBus {
-    pub fn new(ram: Memory, ppu: PPU, cartridge: Cartridge) -> Self {
+    pub fn new(ram: Memory, ppu: PPU, cartridge: Rc<Cartridge>) -> Self {
         Self {
             ram,
             ppu,

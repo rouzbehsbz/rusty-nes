@@ -1,5 +1,3 @@
-use std::rc::Rc;
-
 use crate::{
     bus::cpu_bus::{
         CpuBus, IRQ_VECTOR_ADDRESS_HI, IRQ_VECTOR_ADDRESS_LO, NMI_VECTOR_ADDRESS_HI,
@@ -35,7 +33,7 @@ pub struct CPU {
     pc: u16,
     status: Status,
 
-    cpu_bus: Rc<CpuBus>,
+    bus: CpuBus,
 
     cycles: u8,
     absolute_address: u16,
@@ -43,9 +41,9 @@ pub struct CPU {
 }
 
 impl CPU {
-    pub fn new(cpu_bus: Rc<CpuBus>) -> Self {
-        let lo = cpu_bus.read(RESET_VECTOR_ADDRESS_LO) as u16;
-        let hi = cpu_bus.read(RESET_VECTOR_ADDRESS_HI) as u16;
+    pub fn new(bus: CpuBus) -> Self {
+        let lo = bus.read(RESET_VECTOR_ADDRESS_LO) as u16;
+        let hi = bus.read(RESET_VECTOR_ADDRESS_HI) as u16;
 
         Self {
             a: 0,
@@ -54,7 +52,7 @@ impl CPU {
             sp: STACK_POINTER_INITIAL_OFFSET,
             pc: (hi << 8) | lo,
             status: Status::UNUSED | Status::INTERRUPT,
-            cpu_bus: cpu_bus,
+            bus: bus,
             cycles: 0,
             absolute_address: 0,
             relative_address: 0,
@@ -63,7 +61,7 @@ impl CPU {
 
     pub fn clock(&mut self) -> AppResult<()> {
         if self.cycles == 0 {
-            let byte = self.cpu_bus.read(self.pc);
+            let byte = self.bus.read(self.pc);
             self.increment_pc();
 
             match Opcode::decode(byte) {
@@ -87,8 +85,8 @@ impl CPU {
         self.y = 0;
         self.sp = STACK_POINTER_INITIAL_OFFSET;
 
-        let lo = self.cpu_bus.read(RESET_VECTOR_ADDRESS_LO);
-        let hi = self.cpu_bus.read(RESET_VECTOR_ADDRESS_HI);
+        let lo = self.bus.read(RESET_VECTOR_ADDRESS_LO);
+        let hi = self.bus.read(RESET_VECTOR_ADDRESS_HI);
 
         self.pc = self.get_bytes_to_address(hi, lo);
         self.absolute_address = 0x0000;
@@ -113,8 +111,8 @@ impl CPU {
 
         self.set_status_flag(Status::INTERRUPT, true);
 
-        let lo = self.cpu_bus.read(IRQ_VECTOR_ADDRESS_LO);
-        let hi = self.cpu_bus.read(IRQ_VECTOR_ADDRESS_HI);
+        let lo = self.bus.read(IRQ_VECTOR_ADDRESS_LO);
+        let hi = self.bus.read(IRQ_VECTOR_ADDRESS_HI);
         self.pc = self.get_bytes_to_address(hi, lo);
 
         self.cycles = 7;
@@ -132,8 +130,8 @@ impl CPU {
 
         self.set_status_flag(Status::INTERRUPT, true);
 
-        let lo = self.cpu_bus.read(NMI_VECTOR_ADDRESS_LO) as u8;
-        let hi = self.cpu_bus.read(NMI_VECTOR_ADDRESS_HI) as u8;
+        let lo = self.bus.read(NMI_VECTOR_ADDRESS_LO) as u8;
+        let hi = self.bus.read(NMI_VECTOR_ADDRESS_HI) as u8;
         self.pc = self.get_bytes_to_address(hi, lo);
 
         self.cycles = 7;
@@ -164,79 +162,79 @@ impl CPU {
                 self.increment_pc();
             }
             AddressingMode::Relative => {
-                let offset = self.cpu_bus.read(self.pc) as i8;
+                let offset = self.bus.read(self.pc) as i8;
                 self.increment_pc();
 
                 self.relative_address = offset as i16;
             }
             AddressingMode::ZeroPage => {
-                self.absolute_address = self.cpu_bus.read(self.pc) as u16;
+                self.absolute_address = self.bus.read(self.pc) as u16;
                 self.increment_pc();
             }
             AddressingMode::ZeroPageX => {
-                self.absolute_address = self.cpu_bus.read(self.pc).wrapping_add(self.x) as u16;
+                self.absolute_address = self.bus.read(self.pc).wrapping_add(self.x) as u16;
                 self.increment_pc();
             }
             AddressingMode::ZeroPageY => {
-                self.absolute_address = self.cpu_bus.read(self.pc).wrapping_add(self.y) as u16;
+                self.absolute_address = self.bus.read(self.pc).wrapping_add(self.y) as u16;
                 self.increment_pc();
             }
             AddressingMode::Absolute => {
-                let lo = self.cpu_bus.read(self.pc);
+                let lo = self.bus.read(self.pc);
                 self.increment_pc();
-                let hi = self.cpu_bus.read(self.pc);
+                let hi = self.bus.read(self.pc);
                 self.increment_pc();
 
                 self.absolute_address = self.get_bytes_to_address(hi, lo);
             }
             AddressingMode::AbsoluteX => {
-                let lo = self.cpu_bus.read(self.pc);
+                let lo = self.bus.read(self.pc);
                 self.increment_pc();
-                let hi = self.cpu_bus.read(self.pc);
+                let hi = self.bus.read(self.pc);
                 self.increment_pc();
 
                 self.absolute_address =
                     (self.get_bytes_to_address(hi, lo)).wrapping_add(self.x as u16)
             }
             AddressingMode::AbsoluteY => {
-                let lo = self.cpu_bus.read(self.pc);
+                let lo = self.bus.read(self.pc);
                 self.increment_pc();
-                let hi = self.cpu_bus.read(self.pc);
+                let hi = self.bus.read(self.pc);
                 self.increment_pc();
 
                 self.absolute_address =
                     (self.get_bytes_to_address(hi, lo)).wrapping_add(self.y as u16)
             }
             AddressingMode::Indirect => {
-                let ptr_lo = self.cpu_bus.read(self.pc);
+                let ptr_lo = self.bus.read(self.pc);
                 self.increment_pc();
-                let ptr_hi = self.cpu_bus.read(self.pc);
+                let ptr_hi = self.bus.read(self.pc);
                 self.increment_pc();
 
                 let ptr = self.get_bytes_to_address(ptr_hi, ptr_lo);
 
-                let lo = self.cpu_bus.read(ptr);
-                let hi = self.cpu_bus.read(ptr.wrapping_add(1));
+                let lo = self.bus.read(ptr);
+                let hi = self.bus.read(ptr.wrapping_add(1));
 
                 self.absolute_address = self.get_bytes_to_address(hi, lo)
             }
             AddressingMode::IndirectX => {
-                let base = self.cpu_bus.read(self.pc);
+                let base = self.bus.read(self.pc);
                 self.increment_pc();
 
                 let ptr = base.wrapping_add(self.x) as u16;
 
-                let lo = self.cpu_bus.read(ptr & 0x00FF);
-                let hi = self.cpu_bus.read((ptr.wrapping_add(1)) & 0x00FF);
+                let lo = self.bus.read(ptr & 0x00FF);
+                let hi = self.bus.read((ptr.wrapping_add(1)) & 0x00FF);
 
                 self.absolute_address = self.get_bytes_to_address(hi, lo);
             }
             AddressingMode::IndirectY => {
-                let base = self.cpu_bus.read(self.pc);
+                let base = self.bus.read(self.pc);
                 self.increment_pc();
 
-                let lo = self.cpu_bus.read(base as u16);
-                let hi = self.cpu_bus.read((base.wrapping_add(1)) as u16 & 0x00FF);
+                let lo = self.bus.read(base as u16);
+                let hi = self.bus.read((base.wrapping_add(1)) as u16 & 0x00FF);
 
                 let ptr = self.get_bytes_to_address(hi, lo);
 
@@ -295,57 +293,57 @@ impl CPU {
                 self.update_zero_negative_flags(self.y)
             }
             Instruction::LDA => {
-                self.a = self.cpu_bus.read(self.absolute_address);
+                self.a = self.bus.read(self.absolute_address);
                 self.update_zero_negative_flags(self.a);
             }
             Instruction::LDX => {
-                self.x = self.cpu_bus.read(self.absolute_address);
+                self.x = self.bus.read(self.absolute_address);
                 self.update_zero_negative_flags(self.x);
             }
             Instruction::LDY => {
-                self.y = self.cpu_bus.read(self.absolute_address);
+                self.y = self.bus.read(self.absolute_address);
                 self.update_zero_negative_flags(self.y);
             }
             Instruction::STA => {
-                self.cpu_bus.write(self.absolute_address, self.a);
+                self.bus.write(self.absolute_address, self.a);
             }
             Instruction::STX => {
-                self.cpu_bus.write(self.absolute_address, self.x);
+                self.bus.write(self.absolute_address, self.x);
             }
             Instruction::STY => {
-                self.cpu_bus.write(self.absolute_address, self.y);
+                self.bus.write(self.absolute_address, self.y);
             }
             Instruction::AND => {
-                let value = self.cpu_bus.read(self.absolute_address);
+                let value = self.bus.read(self.absolute_address);
                 self.a &= value;
                 self.update_zero_negative_flags(self.a)
             }
             Instruction::ORA => {
-                let value = self.cpu_bus.read(self.absolute_address);
+                let value = self.bus.read(self.absolute_address);
                 self.a |= value;
                 self.update_zero_negative_flags(self.a)
             }
             Instruction::EOR => {
-                let value = self.cpu_bus.read(self.absolute_address);
+                let value = self.bus.read(self.absolute_address);
                 self.a ^= value;
                 self.update_zero_negative_flags(self.a);
             }
             Instruction::CMP => {
-                let value = self.cpu_bus.read(self.absolute_address);
+                let value = self.bus.read(self.absolute_address);
                 let result = self.a.wrapping_sub(value);
 
                 self.set_status_flag(Status::CARRY, self.a >= value);
                 self.update_zero_negative_flags(result);
             }
             Instruction::CPX => {
-                let value = self.cpu_bus.read(self.absolute_address);
+                let value = self.bus.read(self.absolute_address);
                 let result = self.x.wrapping_sub(value);
 
                 self.set_status_flag(Status::CARRY, self.x >= value);
                 self.update_zero_negative_flags(result);
             }
             Instruction::CPY => {
-                let value = self.cpu_bus.read(self.absolute_address);
+                let value = self.bus.read(self.absolute_address);
                 let result = self.y.wrapping_sub(value);
 
                 self.set_status_flag(Status::CARRY, self.y >= value);
@@ -400,7 +398,7 @@ impl CPU {
                 }
             }
             Instruction::ADC => {
-                let value = self.cpu_bus.read(self.absolute_address);
+                let value = self.bus.read(self.absolute_address);
                 let carry = if self.get_status_flag(Status::CARRY) {
                     1
                 } else {
@@ -417,7 +415,7 @@ impl CPU {
                 self.update_zero_negative_flags(self.a);
             }
             Instruction::SBC => {
-                let value = self.cpu_bus.read(self.absolute_address);
+                let value = self.bus.read(self.absolute_address);
                 let carry = if self.get_status_flag(Status::CARRY) {
                     1
                 } else {
@@ -478,15 +476,15 @@ impl CPU {
                 self.write_a_or_absolute(addressing_mode, value);
             }
             Instruction::INC => {
-                let mut value = self.cpu_bus.read(self.absolute_address);
+                let mut value = self.bus.read(self.absolute_address);
                 value = value.wrapping_add(1);
-                self.cpu_bus.write(self.absolute_address, value);
+                self.bus.write(self.absolute_address, value);
                 self.update_zero_negative_flags(value);
             }
             Instruction::DEC => {
-                let mut value = self.cpu_bus.read(self.absolute_address);
+                let mut value = self.bus.read(self.absolute_address);
                 value = value.wrapping_sub(1);
-                self.cpu_bus.write(self.absolute_address, value);
+                self.bus.write(self.absolute_address, value);
                 self.update_zero_negative_flags(value);
             }
             Instruction::JMP => {
@@ -536,12 +534,12 @@ impl CPU {
                 let status = self.status | Status::BREAK | Status::UNUSED;
                 self.write_to_stack(status.bits());
                 self.set_status_flag(Status::INTERRUPT, true);
-                let lo = self.cpu_bus.read(IRQ_VECTOR_ADDRESS_LO);
-                let hi = self.cpu_bus.read(IRQ_VECTOR_ADDRESS_HI);
+                let lo = self.bus.read(IRQ_VECTOR_ADDRESS_LO);
+                let hi = self.bus.read(IRQ_VECTOR_ADDRESS_HI);
                 self.pc = self.get_bytes_to_address(hi, lo);
             }
             Instruction::BIT => {
-                let value = self.cpu_bus.read(self.absolute_address);
+                let value = self.bus.read(self.absolute_address);
                 self.update_zero_negative_flags(self.a & value);
                 self.set_status_flag(Status::NEGATIVE, self.is_negative(value));
                 self.set_status_flag(Status::OVERFLOW, self.is_overflow(value));
@@ -550,13 +548,13 @@ impl CPU {
     }
 
     fn write_to_stack(&mut self, value: u8) {
-        self.cpu_bus.write(self.get_stack_address(), value);
+        self.bus.write(self.get_stack_address(), value);
         self.sp = self.sp.wrapping_sub(1);
     }
 
     fn read_from_stack(&mut self) -> u8 {
         self.sp = self.sp.wrapping_add(1);
-        self.cpu_bus.read(self.get_stack_address())
+        self.bus.read(self.get_stack_address())
     }
 
     fn is_zero(&self, value: u8) -> bool {
@@ -591,14 +589,14 @@ impl CPU {
     fn read_a_or_absolute(&self, addressing_mode: AddressingMode) -> u8 {
         match addressing_mode {
             AddressingMode::Accumulator => self.a,
-            _ => self.cpu_bus.read(self.absolute_address),
+            _ => self.bus.read(self.absolute_address),
         }
     }
 
     fn write_a_or_absolute(&mut self, addressing_mode: AddressingMode, value: u8) {
         match addressing_mode {
             AddressingMode::Accumulator => self.a = value,
-            _ => self.cpu_bus.write(self.absolute_address, value),
+            _ => self.bus.write(self.absolute_address, value),
         }
     }
 }
