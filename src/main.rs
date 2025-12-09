@@ -1,5 +1,5 @@
 use crate::{
-    bus::cpu_bus::CpuBus, cartridge::cartridge::Cartridge, cpu::cpu::CPU, memory::Memory,
+    bus::cpu_bus::CpuBus, cartridge::cartridge::Cartridge, cpu::cpu::CPU, memory::memory::Memory,
     ppu::ppu::PPU,
 };
 use std::{rc::Rc, thread, time::Duration};

@@ -1,4 +1,4 @@
-use crate::{cartridge::cartridge::Cartridge, memory::Memory, ppu::ppu::PPU};
+use crate::{cartridge::cartridge::Cartridge, memory::memory::Memory, ppu::ppu::PPU};
 
 pub const RAM_ADDRESS_LO: u16 = 0x0000;
 pub const RAM_ADDRESS_HI: u16 = 0x1FFF;

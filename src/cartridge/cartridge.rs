@@ -1,7 +1,7 @@
 use crate::{
     cartridge::mapper::Mapper,
     errors::{AppError, AppResult},
-    memory::Memory,
+    memory::memory::Memory,
 };
 use bitflags::bitflags;
 
