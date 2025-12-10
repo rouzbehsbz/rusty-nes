@@ -1,3 +1,10 @@
+/*
+ * A separate physical device for mapping memory locations
+ * inside the cartridge. This enables games to support
+ * additional memory for both PRG and CHR data.
+ *
+ * This is Mapper 000 implementation
+ */
 pub struct Mapper {
     prg_banks: u8,
     chr_banks: u8,

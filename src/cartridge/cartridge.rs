@@ -5,6 +5,9 @@ use crate::{
 };
 use bitflags::bitflags;
 
+/*
+ * Each bit indicates a specific cartridge feature or configuration
+ */
 bitflags! {
     #[derive(Debug, Clone, Copy)]
     struct MapperFirstFlags: u8 {
@@ -16,6 +19,9 @@ bitflags! {
     }
 }
 
+/*
+ * Each bit indicates a specific cartridge feature or configuration
+ */
 bitflags! {
     #[derive(Debug, Clone, Copy)]
     struct MapperSecondFlags: u8 {
@@ -26,6 +32,7 @@ bitflags! {
     }
 }
 
+/* First 16 bytes of iNES file header */
 struct Header {
     pub prg_banks: u8,
     pub chr_banks: u8,
@@ -34,6 +41,7 @@ struct Header {
 }
 
 impl Header {
+    /* Initializes a new Header */
     fn new(bytes: &[u8]) -> AppResult<Self> {
         if bytes.len() < 16 {
             return Err(AppError::InvalidCartridgeHeaderSize);
@@ -57,6 +65,10 @@ impl Header {
         })
     }
 
+    /*
+     * Calculates cartridge mapper ID from lower and higher
+     * mapper bits mask
+     */
     fn get_mapper_id(&self) -> u8 {
         let lower =
             (self.first_mapper_flags.bits() & MapperFirstFlags::LOWER_MAPPER_BITS_MASK.bits()) >> 4;
@@ -66,15 +78,30 @@ impl Header {
     }
 }
 
+/*
+ * Represents a cartridge containing iNES game data.
+ *
+ * Currently, the implementation only supports iNES 1.0 format
+ * and games using Mapper 000
+ */
 pub struct Cartridge {
     header: Header,
 
+    /*
+     * Disassembled program data
+     * The CPU can read from and write to this memory region
+     */
     prg_ram: Memory,
+    /*
+     * Character data or graphics stored in read-only memory (ROM)
+     * The PPU can only read data from this
+     */
     chr_rom: Memory,
     mapper: Mapper,
 }
 
 impl Cartridge {
+    /* Initializes a new Cartridge */
     pub fn new(bytes: &[u8]) -> AppResult<Self> {
         let header = Header::new(bytes)?;
 
@@ -104,18 +131,21 @@ impl Cartridge {
         })
     }
 
+    /* Reads a specific address from PRG RAM  */
     pub fn prg_read(&self, address: u16) -> u8 {
         let mapped_address = self.mapper.get_prg_address(address);
 
         self.prg_ram.read(mapped_address)
     }
 
+    /* Writes a specific value to an address from PRG RAM  */
     pub fn prg_write(&self, address: u16, value: u8) {
         let mapped_address = self.mapper.get_prg_address(address);
 
         self.prg_ram.write(mapped_address, value);
     }
 
+    /* Reads a specific address from CHR ROM  */
     pub fn chr_read(&self, address: u16) -> u8 {
         let mapped_address = self.mapper.get_chr_address(address);
 
