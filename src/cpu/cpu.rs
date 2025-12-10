@@ -8,9 +8,17 @@ use crate::{
 };
 use bitflags::bitflags;
 
+/*
+ * Special memory location and initial offset
+ * used for stack operations
+ */
 pub const STACK_POINTER_INITIAL_OFFSET: u8 = 0xFD;
 pub const STACK_POINTER_ADDRESS: u16 = 0x0100;
 
+/*
+ * A 1-byte (8-bit) value representing the 6502
+ * CPU status flags after instruction execution
+ */
 bitflags! {
     #[derive(Debug, Clone, Copy)]
     pub struct Status: u8 {
@@ -25,6 +33,10 @@ bitflags! {
     }
 }
 
+/*
+ * A full virtual implementation of the 6502 CPU,
+ * the core hardware responsible for executing software logic
+ */
 pub struct CPU {
     a: u8,
     x: u8,
@@ -41,6 +53,7 @@ pub struct CPU {
 }
 
 impl CPU {
+    /* Initialize a new CPU */
     pub fn new(bus: CpuBus) -> Self {
         let lo = bus.read(RESET_VECTOR_ADDRESS_LO) as u16;
         let hi = bus.read(RESET_VECTOR_ADDRESS_HI) as u16;
@@ -59,6 +72,12 @@ impl CPU {
         }
     }
 
+    /*
+     * Acts as a real physical clock. With each call (or signal),
+     * it jumps to the next instruction and performs the
+     * corresponding virtual cycles, simulating the timing
+     * of a real CPU.
+     */
     pub fn clock(&mut self) -> AppResult<()> {
         if self.cycles == 0 {
             let byte = self.bus.read(self.pc);
@@ -79,6 +98,11 @@ impl CPU {
         Ok(())
     }
 
+    /*
+     * Resets the device by reading the hardcoded address
+     * from the RESET vector inside the cartridge, then
+     * jumping to that address to reboot the software
+     */
     pub fn reset(&mut self) {
         self.a = 0;
         self.x = 0;
@@ -95,6 +119,11 @@ impl CPU {
         self.cycles = 8;
     }
 
+    /*
+     * A maskable interrupt request signal. It saves the current
+     * program data on the stack, then jumps to the hardcoded
+     * address in the cartridge to handle the interrupt
+     */
     pub fn irq(&mut self) {
         if !self.get_status_flag(Status::INTERRUPT) {
             return;
@@ -118,6 +147,10 @@ impl CPU {
         self.cycles = 7;
     }
 
+    /*
+     * A non-maskable version of the IRQ. The key difference is
+     * that it cannot be disabled or ignored by any instruction.
+     */
     pub fn nmi(&mut self) {
         let pc = self.pc;
 
@@ -137,10 +170,12 @@ impl CPU {
         self.cycles = 7;
     }
 
+    /* Simply increments the program counter */
     fn increment_pc(&mut self) {
         self.pc = self.pc.wrapping_add(1);
     }
 
+    /* Sets or unsets a specific flag in the status register */
     fn set_status_flag(&mut self, flag: Status, condition: bool) {
         if condition {
             self.status.insert(flag);
@@ -149,10 +184,15 @@ impl CPU {
         }
     }
 
+    /* Specifies whether a particular flag is set or not */
     fn get_status_flag(&self, flag: Status) -> bool {
         self.status.contains(flag)
     }
 
+    /*
+     * Executes the addressing mode operation associated
+     * with the instruction.
+     */
     fn execute_addressing_mode(&mut self, addressing_mode: AddressingMode) {
         match addressing_mode {
             AddressingMode::Implied => {}
@@ -243,6 +283,7 @@ impl CPU {
         }
     }
 
+    /* Executes the instruction itself */
     fn execute_instruction(&mut self, instruction: Instruction, addressing_mode: AddressingMode) {
         match instruction {
             Instruction::NOP => {}
@@ -547,45 +588,55 @@ impl CPU {
         }
     }
 
+    /* Writes a value to the address pointed to by the stack pointer */
     fn write_to_stack(&mut self, value: u8) {
         self.bus.write(self.get_stack_address(), value);
         self.sp = self.sp.wrapping_sub(1);
     }
 
+    /* Reads a value to from address pointed to by the stack pointer */
     fn read_from_stack(&mut self) -> u8 {
         self.sp = self.sp.wrapping_add(1);
         self.bus.read(self.get_stack_address())
     }
 
+    /* Checks if the value is zero */
     fn is_zero(&self, value: u8) -> bool {
         value == 0x00
     }
 
+    /* Checks if the value is negative */
     fn is_negative(&self, value: u8) -> bool {
         value & 0x80 != 0
     }
 
+    /* Checks if the value is overflowed */
     fn is_overflow(&self, value: u8) -> bool {
         value & 0x40 != 0
     }
 
+    /* Checks whether the most significant bit of the value is set */
     fn is_bit0_set(&self, value: u8) -> bool {
         value & 0x01 != 0
     }
 
+    /* Updates status flags based on given a value */
     fn update_zero_negative_flags(&mut self, value: u8) {
         self.set_status_flag(Status::ZERO, self.is_zero(value));
         self.set_status_flag(Status::NEGATIVE, self.is_negative(value));
     }
 
+    /* Converts two bytes to a 16-bit memory address */
     fn get_bytes_to_address(&self, hi: u8, lo: u8) -> u16 {
         ((hi as u16) << 8) | (lo as u16)
     }
 
+    /* Get current stack pointer location */
     fn get_stack_address(&self) -> u16 {
         STACK_POINTER_ADDRESS | self.sp as u16
     }
 
+    /* Reads a value from an absolute address or the accumulator register */
     fn read_a_or_absolute(&self, addressing_mode: AddressingMode) -> u8 {
         match addressing_mode {
             AddressingMode::Accumulator => self.a,
@@ -593,6 +644,7 @@ impl CPU {
         }
     }
 
+    /* Writes a value to an absolute address or the accumulator register */
     fn write_a_or_absolute(&mut self, addressing_mode: AddressingMode, value: u8) {
         match addressing_mode {
             AddressingMode::Accumulator => self.a = value,

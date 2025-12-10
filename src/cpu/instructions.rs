@@ -1,3 +1,4 @@
+/* All addressing modes supported by the 6502 CPU */
 #[derive(Debug, Clone, Copy)]
 pub enum AddressingMode {
     Accumulator,
@@ -15,6 +16,7 @@ pub enum AddressingMode {
     IndirectY,
 }
 
+/* All instructions supported by the 6502 CPU */
 #[derive(Debug)]
 pub enum Instruction {
     ADC,
@@ -75,6 +77,12 @@ pub enum Instruction {
     TYA,
 }
 
+/*
+ * An Opcode represents a CPU instruction along with its
+ * addressing mode. Additional information such as the
+ * instruction's byte length and the number of cycles
+ * required to execute it is also included here
+ */
 #[derive(Debug)]
 pub struct Opcode {
     pub instruction: Instruction,
@@ -84,6 +92,7 @@ pub struct Opcode {
 }
 
 impl Opcode {
+    /* Decodes a specific byte and translates it into a meaningful Opcode */
     pub fn decode(byte: u8) -> Option<Self> {
         match byte {
             0x00 => Some(Opcode {
